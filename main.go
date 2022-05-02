@@ -9,7 +9,6 @@ package main
 
 import (
 	"fmt"
-	"sync"
 	"time"
 )
 
@@ -57,30 +56,31 @@ func createMetricFetchersAndResultChans(metricFetchers ...func() float64) []Metr
 func fetchPayload() []float64 {
 	var metrics []float64
 	metricFetchersAndResultChans := createMetricFetchersAndResultChans(fetchCPUMetric, fetchMemMetric, fetchDiskMetric)
-	waitChannel := make(chan int8)
+	waitChannel := make(chan uint8)
+	aggregateChannel := make(chan float64, len(metricFetchersAndResultChans))
 
-	wg := sync.WaitGroup{}
 	for _, metricFetcherAndChan := range metricFetchersAndResultChans {
-		wg.Add(1)
-		go func(m MetricFnAndChan, wg *sync.WaitGroup) {
+		go func(m MetricFnAndChan) {
 			defer close(m.metricChan)
-			defer wg.Done()
 			m.metricChan <- m.metricFn()
-		}(metricFetcherAndChan, &wg)
+		}(metricFetcherAndChan)
 	}
 
-	go func(wg *sync.WaitGroup, waitChannel *chan int8) {
-		defer close(*waitChannel)
-		defer wg.Wait()
+	go func(w chan uint8, aggregateChannel chan float64) {
+		defer close(w)
+		defer close(aggregateChannel)
 		for _, metricFetcherAndResultChan := range metricFetchersAndResultChans {
-			for metricChan := range metricFetcherAndResultChan.metricChan {
-				metrics = append(metrics, metricChan)
+			for m := range metricFetcherAndResultChan.metricChan {
+				aggregateChannel <- m
 			}
 		}
-	}(&wg, &waitChannel)
+	}(waitChannel, aggregateChannel)
 
 	select {
 	case <-waitChannel:
+		for m := range aggregateChannel {
+			metrics = append(metrics, m)
+		}
 		return metrics
 	case <-time.After(1 * time.Second):
 		return metrics
