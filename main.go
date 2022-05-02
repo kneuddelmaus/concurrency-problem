@@ -62,11 +62,11 @@ func fetchPayload() []float64 {
 	wg := sync.WaitGroup{}
 	for _, metricFetcherAndChan := range metricFetchersAndResultChans {
 		wg.Add(1)
-		go func(m MetricFnAndChan) {
+		go func(m MetricFnAndChan, wg *sync.WaitGroup) {
 			defer close(m.metricChan)
 			defer wg.Done()
 			m.metricChan <- m.metricFn()
-		}(metricFetcherAndChan)
+		}(metricFetcherAndChan, &wg)
 	}
 
 	go func(wg *sync.WaitGroup, waitChannel *chan int8) {
