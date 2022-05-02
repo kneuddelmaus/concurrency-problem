@@ -69,15 +69,15 @@ func fetchPayload() []float64 {
 		}(metricFetcherAndChan)
 	}
 
-	go func(wg *sync.WaitGroup, waitChannel chan int8) {
-		defer close(waitChannel)
+	go func(wg *sync.WaitGroup, waitChannel *chan int8) {
+		defer close(*waitChannel)
 		defer wg.Wait()
 		for _, metricFetcherAndResultChan := range metricFetchersAndResultChans {
 			for metricChan := range metricFetcherAndResultChan.metricChan {
 				metrics = append(metrics, metricChan)
 			}
 		}
-	}(&wg, waitChannel)
+	}(&wg, &waitChannel)
 
 	select {
 	case <-waitChannel:
