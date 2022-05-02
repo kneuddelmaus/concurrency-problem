@@ -57,7 +57,7 @@ func createMetricFetchersAndResultChans(metricFetchers ...func() float64) []Metr
 func fetchPayload() []float64 {
 	var metrics []float64
 	metricFetchersAndResultChans := createMetricFetchersAndResultChans(fetchCPUMetric, fetchMemMetric, fetchDiskMetric)
-	c := make(chan struct{})
+	waitChannel := make(chan int8)
 
 	wg := sync.WaitGroup{}
 	for _, metricFetcherAndChan := range metricFetchersAndResultChans {
@@ -69,18 +69,18 @@ func fetchPayload() []float64 {
 		}(metricFetcherAndChan)
 	}
 
-	go func(wg *sync.WaitGroup) {
-		defer close(c)
+	go func(wg *sync.WaitGroup, waitChannel chan int8) {
+		defer close(waitChannel)
 		defer wg.Wait()
 		for _, metricFetcherAndResultChan := range metricFetchersAndResultChans {
 			for metricChan := range metricFetcherAndResultChan.metricChan {
 				metrics = append(metrics, metricChan)
 			}
 		}
-	}(&wg)
+	}(&wg, waitChannel)
 
 	select {
-	case <-c:
+	case <-waitChannel:
 		return metrics
 	case <-time.After(1 * time.Second):
 		return metrics
