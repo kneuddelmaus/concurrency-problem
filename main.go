@@ -69,7 +69,7 @@ func fetchPayload() []float64 {
 		}(metricFetcherAndChan)
 	}
 
-	go func() {
+	go func(wg *sync.WaitGroup) {
 		defer close(c)
 		defer wg.Wait()
 		for _, metricFetcherAndResultChan := range metricFetchersAndResultChans {
@@ -77,7 +77,7 @@ func fetchPayload() []float64 {
 				metrics = append(metrics, metricChan)
 			}
 		}
-	}()
+	}(&wg)
 
 	select {
 	case <-c:
