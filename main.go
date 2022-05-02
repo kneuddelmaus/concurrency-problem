@@ -13,10 +13,16 @@ import (
 	"time"
 )
 
+type MetricFnAndChan struct {
+	metricFn   func() float64
+	metricChan chan float64
+}
+
 //predefined method - do not modify
 func fetchCPUMetric() float64 {
 	//queries system and returns cpu usage
 	//dummy return val
+	//time.Sleep(2 * time.Second)
 	return float64(2)
 }
 
@@ -24,6 +30,7 @@ func fetchCPUMetric() float64 {
 func fetchMemMetric() float64 {
 	//queries system and returns memory usage
 	//dummy return val
+	//time.Sleep(2 * time.Second)
 	return float64(5)
 }
 
@@ -31,7 +38,16 @@ func fetchMemMetric() float64 {
 func fetchDiskMetric() float64 {
 	//queries system and returns disk usage
 	//dummy return val
+	//time.Sleep(2 * time.Second)
 	return float64(7)
+}
+
+func createMetricFetchersAndResultChans(metricFetchers ...func() float64) []MetricFnAndChan {
+	var metricFetchersAndResultChans []MetricFnAndChan
+	for _, metricFetcher := range metricFetchers {
+		metricFetchersAndResultChans = append(metricFetchersAndResultChans, MetricFnAndChan{metricFetcher, make(chan float64, 1)})
+	}
+	return metricFetchersAndResultChans
 }
 
 //returns a slice containing 3 elements in this order :
@@ -39,44 +55,35 @@ func fetchDiskMetric() float64 {
 // 1 - mem metric
 // 2 - disk metric
 func fetchPayload() []float64 {
-	metric := []float64{}
-	cpuMetricChan := make(chan float64, 1)
-	memMetricChan := make(chan float64, 1)
-	diskMetricChan := make(chan float64, 1)
+	var metrics []float64
+	metricFetchersAndResultChans := createMetricFetchersAndResultChans(fetchCPUMetric, fetchMemMetric, fetchDiskMetric)
 	c := make(chan struct{})
 
 	wg := sync.WaitGroup{}
-	wg.Add(3)
-
-	go func() {
-		defer wg.Done()
-		cpuMetricChan <- fetchCPUMetric()
-	}()
-	go func() {
-		defer wg.Done()
-		memMetricChan <- fetchMemMetric()
-	}()
-	go func() {
-		defer wg.Done()
-		diskMetricChan <- fetchDiskMetric()
-	}()
+	for _, metricFetcherAndChan := range metricFetchersAndResultChans {
+		wg.Add(1)
+		go func(m MetricFnAndChan) {
+			defer close(m.metricChan)
+			defer wg.Done()
+			m.metricChan <- m.metricFn()
+		}(metricFetcherAndChan)
+	}
 
 	go func() {
 		defer close(c)
-		var chanSlice = []chan float64{
-			cpuMetricChan, memMetricChan, diskMetricChan,
+		defer wg.Wait()
+		for _, metricFetcherAndResultChan := range metricFetchersAndResultChans {
+			for m := range metricFetcherAndResultChan.metricChan {
+				metrics = append(metrics, m)
+			}
 		}
-		for _, metricChan := range chanSlice {
-			metric = append(metric, <-metricChan)
-		}
-		wg.Wait()
 	}()
 
 	select {
 	case <-c:
-		return metric
+		return metrics
 	case <-time.After(1 * time.Second):
-		return metric
+		return metrics
 	}
 }
 
