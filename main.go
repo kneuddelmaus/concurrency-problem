@@ -73,8 +73,8 @@ func fetchPayload() []float64 {
 		defer close(c)
 		defer wg.Wait()
 		for _, metricFetcherAndResultChan := range metricFetchersAndResultChans {
-			for m := range metricFetcherAndResultChan.metricChan {
-				metrics = append(metrics, m)
+			for metricChan := range metricFetcherAndResultChan.metricChan {
+				metrics = append(metrics, metricChan)
 			}
 		}
 	}()
