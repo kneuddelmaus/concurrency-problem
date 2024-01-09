@@ -9,82 +9,64 @@ package main
 
 import (
 	"fmt"
+	"sync"
 	"time"
 )
 
-type MetricFnAndChan struct {
-	metricFn   func() float64
-	metricChan chan float64
-}
-
-//predefined method - do not modify
+// predefined method - do not modify
 func fetchCPUMetric() float64 {
 	//queries system and returns cpu usage
 	//dummy return val
-	//time.Sleep(2 * time.Second)
+	time.Sleep(time.Millisecond * 1000)
 	return float64(2)
 }
 
-//predefined method - do not modify
+// predefined method - do not modify
 func fetchMemMetric() float64 {
 	//queries system and returns memory usage
 	//dummy return val
-	//time.Sleep(2 * time.Second)
+	time.Sleep(time.Millisecond * 500)
 	return float64(5)
 }
 
-//predefined method - do not modify
+// predefined method - do not modify
 func fetchDiskMetric() float64 {
 	//queries system and returns disk usage
 	//dummy return val
-	//time.Sleep(2 * time.Second)
 	return float64(7)
 }
 
-func createMetricFetchersAndResultChans(metricFetchers ...func() float64) []MetricFnAndChan {
-	var metricFetchersAndResultChans []MetricFnAndChan
-	for _, metricFetcher := range metricFetchers {
-		metricFetchersAndResultChans = append(metricFetchersAndResultChans, MetricFnAndChan{metricFetcher, make(chan float64, 1)})
-	}
-	return metricFetchersAndResultChans
-}
-
-//returns a slice containing 3 elements in this order :
+// returns a slice containing 3 elements in this order :
 // 0 - cpu metric
 // 1 - mem metric
 // 2 - disk metric
 func fetchPayload() []float64 {
-	var metrics []float64
-	metricFetchersAndResultChans := createMetricFetchersAndResultChans(fetchCPUMetric, fetchMemMetric, fetchDiskMetric)
-	waitChannel := make(chan uint8)
-	aggregateChannel := make(chan float64, len(metricFetchersAndResultChans))
+	//TODO complete this. write the most optimized implementation to have the fastest total execution time possible.
 
-	for _, metricFetcherAndChan := range metricFetchersAndResultChans {
-		go func(m MetricFnAndChan) {
-			defer close(m.metricChan)
-			m.metricChan <- m.metricFn()
-		}(metricFetcherAndChan)
+	//My solution:
+	// 1. create a slice of float64 for storing metrics
+	metrics := make([]float64, 3)
+	// 2. create a slice of the functions
+	metricFns := []func() float64{
+		fetchCPUMetric, fetchMemMetric, fetchDiskMetric,
+	}
+	// 3. create a wait group
+	wg := &sync.WaitGroup{}
+	wg.Add(len(metricFns))
+	// 4. Loop over metricFns and use the index to populate right index with right metric as asked
+	for i, metricFunc := range metricFns {
+		go func(idx int, metric func() float64) {
+			defer wg.Done()
+
+			metrics[idx] = metric()
+		}(i, metricFunc)
 	}
 
-	go func(w chan uint8, aggregateChannel chan float64) {
-		defer close(w)
-		defer close(aggregateChannel)
-		for _, metricFetcherAndResultChan := range metricFetchersAndResultChans {
-			for m := range metricFetcherAndResultChan.metricChan {
-				aggregateChannel <- m
-			}
-		}
-	}(waitChannel, aggregateChannel)
+	// 5. Wait for all the go routines to finish
+	wg.Wait()
 
-	select {
-	case <-waitChannel:
-		for m := range aggregateChannel {
-			metrics = append(metrics, m)
-		}
-		return metrics
-	case <-time.After(1 * time.Second):
-		return metrics
-	}
+	// 6. return populated metrics
+	return metrics
 }
 
 func main() {
